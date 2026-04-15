@@ -15,21 +15,36 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = require("./db");
+const zod_1 = require("zod");
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const dotenv_1 = __importDefault(require("dotenv"));
 const config_1 = require("./config");
 const middleware_1 = require("./middleware");
 const utils_1 = require("./utils");
 const cors_1 = __importDefault(require("cors"));
+dotenv_1.default.config();
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use((0, cors_1.default)());
+const signupSchema = zod_1.z.object({
+    username: zod_1.z.string().min(3).max(20),
+    password: zod_1.z.string().min(5).max(40)
+});
 app.post("/api/v1/signup", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    // TODO: zod validation, hash the password
-    const username = req.body.username;
-    const password = req.body.password;
+    const parsedData = signupSchema.safeParse(req.body);
+    if (!parsedData.success) {
+        res.status(400).json({
+            message: "Invalid inputs",
+            errors: parsedData.error
+        });
+        return;
+    }
+    const { username, password } = parsedData.data;
     try {
+        const hashedPassword = yield bcrypt_1.default.hash(password, 10);
         yield db_1.UserModel.create({
             username: username,
-            password: password
+            password: hashedPassword
         });
         res.json({
             message: "User signed up"
@@ -44,22 +59,25 @@ app.post("/api/v1/signup", (req, res) => __awaiter(void 0, void 0, void 0, funct
 app.post("/api/v1/signin", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const username = req.body.username;
     const password = req.body.password;
-    const existingUser = yield db_1.UserModel.findOne({
-        username,
-        password
-    });
-    if (existingUser) {
-        const token = jsonwebtoken_1.default.sign({
-            id: existingUser._id
-        }, config_1.JWT_PASSWORD);
-        res.json({
-            token
-        });
+    try {
+        const existingUser = yield db_1.UserModel.findOne({ username });
+        if (!existingUser || !existingUser.password) {
+            res.status(403).json({ message: "Incorrect Credentials" });
+            return;
+        }
+        const isPasswordValid = yield bcrypt_1.default.compare(password, existingUser.password);
+        if (isPasswordValid) {
+            const token = jsonwebtoken_1.default.sign({
+                id: existingUser._id
+            }, config_1.JWT_PASSWORD);
+            res.json({ token });
+        }
+        else {
+            res.status(403).json({ message: "Incorrect Credentials" });
+        }
     }
-    else {
-        res.status(403).json({
-            message: "Incorrect Credentials"
-        });
+    catch (e) {
+        res.status(500).json({ message: "Internal server error" });
     }
 }));
 app.post("/api/v1/content", middleware_1.userMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -160,5 +178,7 @@ app.get("/api/v1/brain/:shareLink", (req, res) => __awaiter(void 0, void 0, void
         content: content
     });
 }));
-app.listen(3000);
-//cloud.mongodb.com
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+});

@@ -33,10 +33,21 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LinkModel = exports.ContentModel = exports.UserModel = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-mongoose_1.default.connect("mongodb+srv://princeagrawal1013:Prince%401234@prince-agrawal.pzlfdls.mongodb.net/brainly");
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+// Fix mongoose warning about strict query
+mongoose_1.default.set("strictQuery", false);
+const mongoURI = process.env.MONGO_URI;
+if (!mongoURI) {
+    throw new Error("MONGO_URI environment variable is not set");
+}
+mongoose_1.default.connect(mongoURI);
 const UserSchema = new mongoose_1.Schema({
     username: { type: String, unique: true },
     password: String
